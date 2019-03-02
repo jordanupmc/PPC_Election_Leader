@@ -41,6 +41,7 @@ class CheckerActor (val id:Int, val terminaux:List[Terminal], electionActor:Acto
 
         case IsAliveLeader (nodeId) => {
           if(this.leader != nodeId){
+               //TODO hack
                electionActor ! RebootState
           }
           this.leader = nodeId;

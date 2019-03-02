@@ -1,6 +1,10 @@
 package upmc.akka.leader
 
 import akka.actor._
+import scala.concurrent.Await
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import akka.util.Timeout
 
 abstract class NodeStatus
 case class Passive () extends NodeStatus
@@ -15,8 +19,10 @@ case class ALG (list:List[Int], nodeId:Int) extends LeaderAlgoMessage
 case class AVS (list:List[Int], nodeId:Int) extends LeaderAlgoMessage
 case class AVSRSP (list:List[Int], nodeId:Int) extends LeaderAlgoMessage
 case class RebootState () extends LeaderAlgoMessage
+//case class SyncStartMsg () extends LeaderAlgoMessage
 
 case class StartWithNodeList (list:List[Int])
+
 
 class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
 
@@ -25,7 +31,8 @@ class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
 
      var candSucc:Int = -1
      var candPred:Int = -1
-     var status:NodeStatus = new Passive ()
+     var status:NodeStatus = new Candidate ()
+     var barrier:Int=0
 
      def receive = {
 
@@ -36,9 +43,10 @@ class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
 
           case RebootState => {
                println("REBOOT !")
-               this.status = new Passive()
+               this.status = new Candidate()
                this.candPred = -1
                this.candSucc = -1
+               this.barrier = 0
                this.nodesAlive = List(id)
           }
 
@@ -57,13 +65,15 @@ class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
           }
 
           case Initiate => {
-               if(status == Passive() ){
+               if(this.barrier == 0){
                     status = Candidate()
                     this.candPred = -1
                     this.candSucc = -1
-                    println("SEND ALG "+ id + " -> succ de "+ id) 
-                    getRemoteRingSuccessor(id, nodesAlive) ! ALG(nodesAlive, id)
                }
+               if(this.nodesAlive.size == 1)
+                    getRemoteRingSuccessor(id, this.nodesAlive) ! ALG(this.nodesAlive, id)
+               else
+                    broadcastSyncStartMsg()
           }
 
           case ALG (list, init) => {
@@ -149,6 +159,16 @@ class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
                }
           }
 
+          case Sync(alivesList) => {
+               barrier+=1
+               this.nodesAlive = alivesList
+               println(barrier +" BARRIER|  nodesAliveSize = "+ alivesList.size)
+               if(barrier == alivesList.size ){
+                    println("SEND ALG "+ id + " -> succ de "+ id) 
+                    getRemoteRingSuccessor(id, alivesList) ! ALG(alivesList, id)
+               }
+          }
+
      }
 
      def getRemoteRingSuccessor(i:Int, list: List[Int]) : ActorSelection = {
@@ -178,6 +198,17 @@ class ElectionActor (val id:Int, val terminaux:List[Terminal]) extends Actor {
           list( (list.indexOf(i)+1) % (list.size))
      }
 
-
+     def broadcastSyncStartMsg() : Unit= {
+          //Thread.sleep(1500)
+          terminaux.foreach({
+               case n => {
+                    if(nodesAlive.contains(n.id) ){
+                         val remote = context.actorSelection("akka.tcp://LeaderSystem" + n.id + "@" + n.ip + ":" + n.port + "/user/Node/electionActor")
+                         remote ! Sync(this.nodesAlive) 
+                         println("SEND SYNC !")
+                    }
+               }
+          })
+     }
 
 }

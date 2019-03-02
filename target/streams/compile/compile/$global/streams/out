@@ -1,4 +1,0 @@
-[0m[[0m[31merror[0m] [0m[0m/home/jordan/Bureau/Projet_code/src/main/scala/ElectionActor.scala:167:2: value unary_! is not a member of upmc.akka.leader.RebootState[0m
-[0m[[0m[31merror[0m] [0m[0m ! RebootState()[0m
-[0m[[0m[31merror[0m] [0m[0m ^[0m
-[0m[[0m[31merror[0m] [0m[0mone error found[0m
